@@ -325,3 +325,17 @@ spring:
 优先级
 
 resoures  >  static（默认）>  public
+
+
+
+## 首页
+
+放在resoures  、  static、  public目录下的index.html页面可以直接访问
+
+而在templates目录下的所有页面，只能使用controller操作
+
+
+
+## SpringMVC自动配置
+
+在springboot中有非常多的xxxConfiguration帮我们进行扩展配置
