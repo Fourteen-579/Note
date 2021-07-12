@@ -131,7 +131,7 @@ public class Springboot01HelloworldApplication {
 
 ### 语法结构
 
-key: 空格value
+key: *空格*value
 
 **对空格的要求十分高**
 
@@ -339,3 +339,492 @@ resoures  >  static（默认）>  public
 ## SpringMVC自动配置
 
 在springboot中有非常多的xxxConfiguration帮我们进行扩展配置
+
+自己的配置类需要继承**WebMvcConfigurer**
+
+
+
+## 页面国际化
+
+1. 配置i18n文件
+2. 如果需要进行按钮自动切换。需要自定义一个组件LocaleResolver
+3. 记得将自己写的组件配置到spring容器中（使用@Bean）
+
+
+
+## 页面拦截器
+
+- 创建类实现HandlerInterceptor接口中的preHandle
+- 在配置类中将拦截器注册使用 addInterceptors
+
+
+
+## Error页面
+
+在templements页面下直接放入404页面则会自动跳转
+
+
+
+# 数据库
+
+## applicaiton.yaml中配置durid数据源
+
+```yaml
+spring:
+  datasource:
+    #基本数据配置
+    username: 'root'
+    password: '2000107ksz'
+    url: jdbc:mysql://localhost:3306/mydb?timeZone=HongKong
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    #修改数据源类型
+    type: com.alibaba.druid.pool.DruidDataSource
+    #基本数据配置
+    initialSize: 5
+    minIdle: 5
+    maxActive: 20
+    maxWait: 60000
+    timeBetweenEvictionRunsMillis: 60000
+    minEvictableIdleTimeMillis: 300000
+    validationQuery: SELECT 1 FROM DUAL
+    testWhileIdle: true
+    testOnBorrow: false
+    testOnReturn: false
+    poolPreparedStatements: true
+    #配置监控统计拦截的filters，stat：监控统计、log4j：日志记录、wall：防御sql注入
+    #如果允许报错，java.lang.ClassNotFoundException: org.apache.Log4j.Properity
+    #则导入log4j 依赖就行
+    filters: stat,wall,log4j
+    maxPoolPreparedStatementPerConnectionSize: 20
+    useGlobalDataSourceStat: true
+    connectionProperties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=500
+```
+
+## 配置后台监控
+
+```java
+@Configuration
+public class DuridConfig {
+
+    @Bean
+    @ConfigurationProperties(prefix = "spring.datasource")
+    public DataSource dataSource() {
+        return new DruidDataSource();
+    }
+
+    //后台监控
+    //因为springboot内置了servlet 所以没有web.xml，替代方法：ServletRegistrationBean
+    @Bean
+    public ServletRegistrationBean a() {
+        ServletRegistrationBean<StatViewServlet> bean = new ServletRegistrationBean<>(new StatViewServlet(), "/druid/*");
+
+        //后台需要有人登录，账号密码配置
+        HashMap<String, String> initParameters = new HashMap<>();
+        //设置账号密码 key为固定值
+        initParameters.put("loginUsername", "admin");
+        initParameters.put("loginPassword", "123456");
+
+        //允许谁可以访问
+        initParameters.put("allow","");
+
+        //禁止谁能访问
+        //initParameters.put("name","192.215.80.132");
+
+        bean.setInitParameters(initParameters); //设置初始化参数
+
+        return bean;
+    }
+
+}
+```
+
+## 配置过滤
+
+```java
+@Bean
+public FilterRegistrationBean webStart() {
+    FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
+    bean.setFilter(new WebStatFilter());
+
+    //可以过滤哪些请求？
+    HashMap<String, String> initParameters = new HashMap<>();
+    //这些不进行统计
+    initParameters.put("exclusions", "*.js,*.css,/druid/*");
+
+    bean.setInitParameters(initParameters);
+    return bean;
+}
+```
+
+## 整合Mybatis
+
+- 导入mybatis-spring-boot包
+
+```xml
+<dependency>
+	<groupId>org.mybatis.spring.boot</groupId>
+	<artifactId>mybatis-spring-boot-starter</artifactId>
+	<version>1.3.2</version>
+</dependency>
+```
+
+- 配置mybatis
+
+```yaml
+mybatis:
+  #别名
+  type-aliases-package: com.fourteen.pojo  
+  #对应mapper.xml文件路径配置
+  mapper-locations: classpath:mybatis/mapper/*.xml
+```
+
+- UserMapper Interface
+
+```java
+//声明为mapper
+@Mapper
+//spring注入
+@Repository
+```
+
+- 编写对应mapper.xml文件
+
+
+
+# SpringSecurity
+
+
+
+## 使用步骤
+
+1. 导入依赖
+
+   ```xml
+   <dependency>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-starter-security</artifactId>
+   </dependency>
+   ```
+
+2. 使用代码（已经是旧的代码，新的代码需要去官网找）
+
+   ```java
+   @EnableWebSecurity
+   public class SecurityConfig extends WebSecurityConfigurerAdapter {
+   
+       //授权
+       @Override
+       protected void configure(HttpSecurity http) throws Exception {
+           //请求授权的规则
+           http.authorizeRequests()
+                   .antMatchers("/").permitAll()
+                   .antMatchers("/level1/**").hasRole("vip1")
+                   .antMatchers("/level2/**").hasRole("vip2")
+                   .antMatchers("/level3/**").hasRole("vip3");
+   
+           //没有权限会默认到登录页面,需要开启登录的页面
+           http.formLogin();
+       }
+   
+       //认证
+       //密码编码：PasswordEncoder
+       //在Spring Secutiry 5.0+ 新增了很多加密方式
+       @Override
+       protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+           //一般情况下我们会从数据库中读取
+           auth.inMemoryAuthentication()
+                   .passwordEncoder(new BCryptPasswordEncoder())           //设置密码加密方式
+                   .withUser("fourteen").password(new BCryptPasswordEncoder().encode("123456")).roles("vip2", "vip3")
+                   .and()
+                   .withUser("root").password(new BCryptPasswordEncoder().encode("123456")).roles("vip1", "vip2", "vip3");
+       }
+   }
+   ```
+
+   
+
+# Shiro
+
+待定
+
+
+
+# Swagger
+
+学习目标：
+
+- 了解Swagger的作用和概念
+- 了解前后端分离
+- 在SpringBoot中集成Swagger
+
+
+
+## Swagger简介
+
+- 号称世界上最流行的API框架
+- Restful API文档在线自动生成工具=>API文档和API定义同步更新
+- 直接运行，可以在线测试API接口
+- 支持多种语言
+
+
+
+在项目使用Swagger需要springbox
+
+- swagger2
+- ui
+
+
+
+## SpringBoot集成Swagger
+
+1. 新建一个Springboot的Web项目
+
+2. 导入相关依赖
+
+   ```xml
+   <!-- https://mvnrepository.com/artifact/io.springfox/springfox-swagger-ui -->
+   <dependency>
+       <groupId>io.springfox</groupId>
+       <artifactId>springfox-swagger-ui</artifactId>
+       <version>2.9.2</version>
+   </dependency>
+   <!-- https://mvnrepository.com/artifact/io.springfox/springfox-swagger2 -->
+   <dependency>
+       <groupId>io.springfox</groupId>
+       <artifactId>springfox-swagger2</artifactId>
+       <version>2.9.2</version>
+   </dependency>
+   ```
+
+3. 编写一个Hello
+
+4. 配置swagger
+
+   ```java
+   @Configuration
+   //开启Swagger
+   @EnableSwagger2
+   public class SwaggerConfig{}
+   ```
+
+
+
+### 配置Swagger基本信息
+
+在启动类上添加
+
+```java
+//开启Swagger
+@EnableSwagger2
+```
+
+添加配置类config
+
+```java
+@Configuration
+public class SwaggerConfig {
+
+    //配置Swagger的Docket的bean实例
+    @Bean
+    public Docket docket(){
+        return new Docket(DocumentationType.SWAGGER_2)
+                .apiInfo(apiInfo());
+    }
+
+    private ApiInfo apiInfo(){
+        Contact contact = new Contact("Fourteen", "null", "null");
+        return new ApiInfo("Fourteen Api Documentation",
+                "这是一个接口文档",
+                "1.0",
+                "urn:tos",
+                contact,
+                "Apache 2.0",
+                "http://www.apache.org/licenses/LICENSE-2.0",
+                new ArrayList());
+    }
+
+}
+```
+
+
+
+### 配置扫描接口
+
+```java
+//配置Swagger的Docket的bean实例
+@Bean
+public Docket docket(){
+    return new Docket(DocumentationType.SWAGGER_2)
+            .apiInfo(apiInfo())
+            .select()
+            //RequestHandlerSelectors 配置要扫描的接口方式
+            //basePackage 指定要扫描的包 √
+            //any():扫描全部
+            //none():都不扫描
+            //withClassAnnotation():扫描类上的注解，参数是一个注解的反射对象
+            //withMethodAnnotation():扫描方法上的注解
+            .apis(RequestHandlerSelectors.basePackage("com.fourteen.controller"))
+            //过滤某路径（指定只能扫描/fourteen/**以下的路径）
+            .paths(PathSelectors.ant("/fourteen/**"))
+            .build();
+}
+```
+
+
+
+### 配置是否启动Swagger
+
+```java
+//配置Swagger的Docket的bean实例
+@Bean
+public Docket docket(){
+    return new Docket(DocumentationType.SWAGGER_2)
+            .apiInfo(apiInfo())
+            //选择是否使用swagger
+            .enable(false)
+            .select()
+            .apis(RequestHandlerSelectors.basePackage("com.fourteen.controller"))
+            .build();
+}
+```
+
+
+
+如果需要在测试环境可以使用swagger，正式环境中不可以使用：
+
+```java
+//配置Swagger的Docket的bean实例
+@Bean
+public Docket docket(Environment environment){
+
+    //设置要显示的Swagger环境
+    Profiles profiles = Profiles.of("dev","test");
+    //通过environment.acceptsProfiles判断是否处在自己设定的环境当中
+    boolean flag = environment.acceptsProfiles(profiles);
+
+    return new Docket(DocumentationType.SWAGGER_2)
+            .apiInfo(apiInfo())
+            //选择是否使用swagger
+            .enable(flag)
+            .select()
+            .apis(RequestHandlerSelectors.basePackage("com.fourteen.controller"))
+            .build();
+}
+```
+
+
+
+### 配置分组
+
+```java
+return new Docket(DocumentationType.SWAGGER_2)
+                .groupName("拾肆")
+```
+
+```java
+    @Bean
+    public Docket docket1() {
+        return new Docket(DocumentationType.SWAGGER_2)
+                .groupName("A");
+    }
+
+    @Bean
+    public Docket docket2() {
+        return new Docket(DocumentationType.SWAGGER_2)
+                .groupName("B");
+    }
+
+    @Bean
+    public Docket docket3() {
+        return new Docket(DocumentationType.SWAGGER_2)
+                .groupName("C");
+    }
+```
+
+
+
+### 实体类配置
+
+#### Model配置
+
+```java
+@RestController
+public class HelloController {
+
+    @GetMapping("/hello")
+    public String hello(){
+        return "hello";
+    }
+
+    //只要我们的接口返回值包含实体类，则接口文档就会扫描到Swagger
+    @PostMapping("/user")
+    public User user(){
+        return new User();
+    }
+
+}
+```
+
+![image-20210616163930026](F:\note\backStage\SpringBoot\image-20210616163930026.png)
+
+#### 实体类注解信息
+
+```java
+@ApiModel("用户实体类")
+public class User {
+
+    @ApiModelProperty("用户名")
+    public String userName;
+    @ApiModelProperty("用户密码")
+    public String pwd;
+}
+```
+
+![image-20210616164054859](F:\note\backStage\SpringBoot\image-20210616164054859.png)
+
+
+
+### 方法信息配置
+
+![image-20210616164721087](F:\note\backStage\SpringBoot\image-20210616164721087.png)
+
+
+
+## 总结
+
+- 添加注释
+- 实时更新
+- 在线测试
+
+【注意点】在正式发布的时候，关闭Swagger
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
